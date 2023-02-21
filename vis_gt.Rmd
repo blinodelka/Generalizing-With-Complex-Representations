@@ -1,0 +1,95 @@
+---
+author: "Marina Dubova"
+---
+
+Loading packages & setting up the environment
+
+```{r packages}
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+
+#change to your path with the data
+PATH = "YOUR_DATA_PATH"
+setwd(PATH)
+```
+
+Reading the data
+```{r}
+# the experiment was repeated 3 times, hence 3 data encodings
+data <- c()
+for (i in 0:50) {
+  try({data_sim <- read.table(paste("sim_45_", as.character(i), ".csv", sep=''), sep=',', header = TRUE,stringsAsFactors=FALSE)
+  data = rbind(data,data_sim)})
+}
+for (i in 0:50) {
+  try({data_sim <- read.table(paste("sim_45_2_", as.character(i), ".csv", sep=''), sep=',', header = TRUE,stringsAsFactors=FALSE)
+  data = rbind(data,data_sim)})
+}
+for (i in 0:50) {
+  try({data_sim <- read.table(paste("sim_45_3_", as.character(i), ".csv", sep=''), sep=',', header = TRUE,stringsAsFactors=FALSE)
+  data = rbind(data,data_sim)})
+}
+```
+
+Cleaning the variable formats & names
+```{r}
+str(data)
+
+data$measurement_capacity = as.factor(data$measurement_capacity)
+data$explanation_capacity = as.factor(data$explanation_capacity)
+
+data$measurement_capacity = as.character(data$measurement_capacity)
+data[data$measurement_capacity=="1",]$measurement_capacity = " 4 dimensions\n 1 recorded"
+data[data$measurement_capacity=="2" & data$n_dimensions==4,]$measurement_capacity = " 4 dimensions\n 2 recorded"
+data[data$measurement_capacity=="2" & data$n_dimensions==8,]$measurement_capacity = " 8 dimensions\n 2 recorded"
+data[data$measurement_capacity=="4",]$measurement_capacity = " 8 dimensions\n 4 recorded"
+data[data$measurement_capacity=="25",]$measurement_capacity = "100 dimensions\n 25 recorded"
+data[data$measurement_capacity=="50",]$measurement_capacity = "100 dimensions\n 50 recorded"
+
+data$n_clusters = as.character(data$n_clusters)
+data[data$n_clusters == "1",]$n_clusters = "1 cluster"
+data[data$n_clusters == "10",]$n_clusters = "10 clusters"
+data[data$n_clusters == "100",]$n_clusters = "100 clusters"
+```
+
+
+Visualizing test performance over time
+```{r}
+data_short = select(data, -starts_with("best_local"))
+data_short = select(data_short, -starts_with("best_global"))
+data_short = select(data_short, -starts_with("average_local"))
+data_short = mutate(data_short, id = row_number())
+data_long <- gather(data_short, time, average_obj_performance, average_global_performance_0:average_global_performance_300, factor_key=TRUE)
+
+data_long$time = as.numeric(gsub("average_global_performance_","",as.character(data_long$time)))
+
+data_long$id = as.character(data_long$id)
+
+ggplot(data_long, aes(x=time, y=average_obj_performance, col=explanation_capacity, alpha=0.1)) +  geom_smooth(alpha=0.1) + facet_wrap(~measurement_capacity, ncol=2) + ylab("Average generalization error")  + theme_bw() + scale_fill_hue(h = c(0, 190),l = 40, c = 30, aesthetics = "fill") + scale_colour_hue(h = c(80, 280),l = 60, c = 60, aesthetics = "col") + xlab("N of training samples") + labs(col = "Representation\ndimensionality")
+```
+
+Visualizing training and testing error at the end of learning
+```{r}
+ggplot(data,
+       aes(x=explanation_capacity, y=average_global_performance_300)) +
+  geom_violin(size=3, fill="#2C5985", color="#2C5985", alpha=0.5)+ geom_boxplot(width=0.2, color="white", alpha=0.2) + theme_bw() + xlab("") + ylab("Average generalization error") + theme(text = element_text(size=13), panel.grid.major = element_blank(), 
+        panel.background = element_rect(fill = "transparent",colour = NA),
+        plot.background = element_rect(fill = "transparent",colour = NA), legend.position = "none"
+) + theme(axis.text.x = element_text(angle = 90))  + facet_wrap(~measurement_capacity, ncol=2) + xlab("Representation dimensionality")
+
+# training error for 4 & 8 dim environments does not go to 0 -- potentially due to the noisiness of the observations for these conditions (agents don't have enough information to make good predictions about the masked dimensions) -- TODO: test this further 
+ggplot(data,
+       aes(x=explanation_capacity, y=average_local_performance_300)) +
+  geom_violin(size=3, fill="#2C5985", color="#2C5985", alpha=0.5)+ geom_boxplot(width=0.2, color="white", alpha=0.2) + theme_bw() + xlab("") + ylab("Average training error") + theme(text = element_text(size=13), panel.grid.major = element_blank(), 
+        panel.background = element_rect(fill = "transparent",colour = NA),
+        plot.background = element_rect(fill = "transparent",colour = NA), legend.position = "none") + theme(axis.text.x = element_text(angle = 90))  + facet_wrap(~measurement_capacity, ncol=2) 
+
+ggplot(data[data$n_dimensions==100,],
+       aes(x=explanation_capacity, y=average_local_performance_300)) +
+  geom_violin(size=3, fill="#2C5985", color="#2C5985", alpha=0.5)+ geom_boxplot(width=0.2, color="white", alpha=0.2) + theme_bw() + xlab("") + ylab("Average training error") + theme(text = element_text(size=13), panel.grid.major = element_blank(), 
+        panel.background = element_rect(fill = "transparent",colour = NA),
+        plot.background = element_rect(fill = "transparent",colour = NA), legend.position = "none"
+) + theme(axis.text.x = element_text(angle = 90))  + facet_wrap(~measurement_capacity, ncol=2) 
+```
+
